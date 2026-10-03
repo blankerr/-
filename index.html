@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Slay The Race - 30s Auto Turn Game</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #121214; color: #fff; font-family: 'Pretendard', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: #1a1a24; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; }
+        
+        .timer-badge { background: #ff4757; color: #fff; font-weight: bold; padding: 4px 12px; border-radius: 12px; font-size: 16px; min-width: 80px; text-align: center; }
+
+        .main-board { display: flex; flex: 1; padding: 15px; gap: 15px; overflow: hidden; }
+        .arena { flex: 1; background: #1e1e2d; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #333; overflow-y: auto; }
+        
+        .global-boss-box { background: linear-gradient(135deg, #400000, #1a0000); border: 2px solid #ff4757; border-radius: 10px; padding: 10px; text-align: center; margin-bottom: 8px; display: none; }
+        .global-boss-box.active { display: block; animation: pulse 1.5s infinite alternate; }
+        @keyframes pulse { from { border-color: #ff4757; } to { border-color: #ffa502; } }
+
+        .monster-box { background: #2a2a3c; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #444; margin-top: 5px; }
+        .hp-bar-bg { background: #444; height: 14px; border-radius: 7px; margin-top: 6px; overflow: hidden; }
+        .hp-bar-fill { background: #ff4757; height: 100%; width: 100%; transition: width 0.3s; }
+
+        .player-status { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; }
+        .hand-container { display: flex; gap: 10px; overflow-x: auto; padding: 10px 0; min-height: 155px; }
+        
+        .card { width: 110px; height: 140px; background: #2f3542; border: 2px solid #70a1ff; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.1s; user-select: none; flex-shrink: 0; }
+        .card:hover { transform: translateY(-5px); border-color: #eccc68; }
+        
+        .card-cost { background: #eccc68; color: #000; font-weight: bold; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; }
+        .card-title { font-size: 12px; font-weight: bold; text-align: center; margin-top: 2px; }
+        .card-desc { font-size: 10px; color: #ccc; }
+        
+        .btn-merge { background: #9b59b6; color: white; border: none; padding: 4px; font-size: 10px; border-radius: 4px; cursor: pointer; margin-top: 3px; }
+        .btn-merge:hover { background: #8e44ad; }
+
+        .side-panel { width: 280px; background: #181824; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; border: 1px solid #333; }
+        .log-box { flex: 1; background: #0a0a10; border-radius: 8px; padding: 10px; overflow-y: auto; font-size: 11px; color: #aaa; margin-top: 10px; line-height: 1.5; }
+        .btn-end { background: #2ed573; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-end:hover { background: #26af5f; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2>⚔️ Slay The Race (30초 자동 턴 넘김)</h2>
+    <div style="display: flex; gap: 15px; align-items: center;">
+        <div>현재 턴: <span id="turn-count" style="color:#eccc68; font-weight:bold;">1</span>턴</div>
+        <div class="timer-badge">⏳ <span id="timer-sec">30</span>s</div>
+    </div>
+</header>
+
+<div class="main-board">
+    <!-- 내 전장 -->
+    <div class="arena">
+        <div>
+            <!-- 공동 보스 등장 영역 -->
+            <div id="boss-box" class="global-boss-box">
+                <h3 id="boss-title">🔥 공동 보스 출현!</h3>
+                <div class="hp-bar-bg"><div id="boss-hp-fill" class="hp-bar-fill" style="background: #ff4757;"></div></div>
+                <small><span id="boss-hp">0/0</span> HP (모든 공격이 보스에게 집중됩니다)</small>
+            </div>
+
+            <div class="player-status">
+                <span>💖 HP: <span id="my-hp">100</span></span>
+                <span>⚡ 마나: <span id="my-energy">3</span>/3</span>
+                <span>🛡️ 방어: <span id="my-block">0</span></span>
+                <span>⚔️ 공격버프: +<span id="my-buff">0</span></span>
+            </div>
+
+            <div class="monster-box">
+                <h4 id="my-monster-name">개인 몬스터</h4>
+                <div class="hp-bar-bg"><div id="my-monster-hp-fill" class="hp-bar-fill"></div></div>
+                <small><span id="my-monster-hp">0</span> HP</small>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <h4>내 핸드</h4>
+                <button class="btn-end" onclick="endTurn()">즉시 턴 종료 ⚡</button>
+            </div>
+            <div class="hand-container" id="hand-box"></div>
+        </div>
+    </div>
+
+    <!-- AI 라이벌 -->
+    <div class="arena" style="background: #14141d;">
+        <div>
+            <h3>🤖 AI 라이벌</h3>
+            <div class="player-status" style="margin-top: 8px;">
+                <span>💖 HP: <span id="opp-hp">100</span></span>
+                <span>🏆 처치: <span id="opp-kills">0</span></span>
+            </div>
+            <div class="monster-box" style="border-color: #ffa502;">
+                <h4 id="opp-monster-name">AI 몬스터</h4>
+                <div class="hp-bar-bg"><div id="opp-monster-hp-fill" class="hp-bar-fill" style="background: #ffa502;"></div></div>
+                <small><span id="opp-monster-hp">0</span> HP</small>
+            </div>
+        </div>
+        <div style="background: #1e1e2c; padding: 15px; border-radius: 8px; border: 1px dashed #555; text-align: center; margin-top: 20px;">
+            <p style="font-size: 12px; color: #aaa;">공동 보스가 등장했을 때는<br>카드를 쓰면 자동으로 보스에게 딜이 들어갑니다!</p>
+        </div>
+    </div>
+
+    <!-- 로그 -->
+    <div class="side-panel">
+        <h3>전투 기록</h3>
+        <div class="log-box" id="log-box"></div>
+    </div>
+</div>
+
+<script>
+    const playerId = "Player_" + Math.floor(Math.random() * 1000);
+    const ws = new WebSocket(`ws://${location.host}/ws/race/${playerId}`);
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "state_update") {
+            renderState(data.state);
+            if(data.logs) data.logs.forEach(addLog);
+        }
+    };
+
+    function playCard(cardInstanceId) {
+        ws.send(JSON.stringify({ action: "play_card", card_instance_id: cardInstanceId }));
+    }
+
+    function mergeCards(baseId, level) {
+        ws.send(JSON.stringify({ action: "merge_cards", base_id: baseId, level: level }));
+    }
+
+    function endTurn() {
+        ws.send(JSON.stringify({ action: "end_turn" }));
+    }
+
+    function renderState(state) {
+        document.getElementById('turn-count').innerText = state.turn_count;
+        if (state.time_remaining !== undefined) {
+            document.getElementById('timer-sec').innerText = state.time_remaining;
+        }
+
+        const me = state.me;
+        const opp = state.opponent;
+
+        document.getElementById('my-hp').innerText = me.hp;
+        document.getElementById('my-energy').innerText = me.energy;
+        document.getElementById('my-block').innerText = me.block;
+        document.getElementById('my-buff').innerText = me.buff_damage;
+
+        // 보스 표시 설정
+        const bossBox = document.getElementById('boss-box');
+        if (state.global_boss) {
+            bossBox.classList.add('active');
+            document.getElementById('boss-title').innerText = state.global_boss.name;
+            document.getElementById('boss-hp').innerText = `${state.global_boss.hp} / ${state.global_boss.max_hp}`;
+            document.getElementById('boss-hp-fill').style.width = `${(state.global_boss.hp / state.global_boss.max_hp) * 100}%`;
+        } else {
+            bossBox.classList.remove('active');
+        }
+
+        // 몬스터
+        if (me.current_monster) {
+            document.getElementById('my-monster-name').innerText = me.current_monster.name;
+            document.getElementById('my-monster-hp').innerText = `${me.current_monster.hp} / ${me.current_monster.max_hp}`;
+            document.getElementById('my-monster-hp-fill').style.width = `${(me.current_monster.hp / me.current_monster.max_hp) * 100}%`;
+        }
+
+        // 핸드 UI 안전하게 강제 렌더링
+        const handBox = document.getElementById('hand-box');
+        handBox.innerHTML = '';
+
+        if (me && me.hand && me.hand.length > 0) {
+            const cardCounts = {};
+            me.hand.forEach(c => {
+                const key = `${c.base_id}_${c.level}`;
+                cardCounts[key] = (cardCounts[key] || 0) + 1;
+            });
+
+            me.hand.forEach(card => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card';
+
+                const key = `${card.base_id}_${card.level}`;
+                const canMerge = cardCounts[key] >= 2;
+
+                cardEl.innerHTML = `
+                    <div class="card-cost">${card.cost}</div>
+                    <div class="card-title">${card.name}</div>
+                    <div class="card-desc">${card.description}</div>
+                    ${canMerge ? `<button class="btn-merge" onclick="event.stopPropagation(); mergeCards('${card.base_id}',${card.level})">✨ 합성 (+)</button>` : ''}
+                `;
+
+                cardEl.onclick = () => playCard(card.instance_id);
+                handBox.appendChild(cardEl);
+            });
+        }
+
+        document.getElementById('opp-hp').innerText = opp.hp;
+        document.getElementById('opp-kills').innerText = opp.monsters_cleared;
+        if (opp.current_monster) {
+            document.getElementById('opp-monster-name').innerText = opp.current_monster.name;
+            document.getElementById('opp-monster-hp').innerText = `${opp.current_monster.hp} / ${opp.current_monster.max_hp}`;
+            document.getElementById('opp-monster-hp-fill').style.width = `${(opp.current_monster.hp / opp.current_monster.max_hp) * 100}%`;
+        }
+
+        if (state.game_over) {
+            const resultMsg = state.winner === me.player_id ? "🏆 승리했습니다!" : "💀 패배했습니다.";
+            setTimeout(() => alert(`게임 종료!\n${resultMsg}`), 100);
+        }
+    }
+
+    function addLog(msg) {
+        const logBox = document.getElementById('log-box');
+        const p = document.createElement('div');
+        p.innerText = msg;
+        logBox.appendChild(p);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+</script>
+</body>
+</html>
